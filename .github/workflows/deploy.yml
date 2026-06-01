@@ -1,0 +1,50 @@
+name: Deploy Portfolio
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            # 1. Navigate to project directory
+            mkdir -p ~/projects
+            cd ~/projects/sahil-manjhi-portfolio || git clone https://github.com/Sahil5H4RD4/sahil-manjhi-portfolio.git ~/projects/sahil-manjhi-portfolio && cd ~/projects/sahil-manjhi-portfolio
+            
+            # 2. Update code
+            git pull origin main
+            
+            # 3. Backup current image for rollback
+            docker tag sahil-manjhi-portfolio:latest sahil-manjhi-portfolio:previous || true
+            
+            # 4. Build and deploy
+            echo "Building new image..."
+            if docker build -t sahil-manjhi-portfolio:latest .; then
+                echo "Build successful. Restarting container..."
+                docker stop sahil-manjhi-portfolio || true
+                docker rm sahil-manjhi-portfolio || true
+                docker run -d \
+                  --name sahil-manjhi-portfolio \
+                  --restart unless-stopped \
+                  -p 3000:80 \
+                  sahil-manjhi-portfolio:latest
+                
+                # Optional: Cleanup unused images to save space
+                docker image prune -f
+            else
+                echo "Build failed! Deployment cancelled."
+                exit 1
+            fi
