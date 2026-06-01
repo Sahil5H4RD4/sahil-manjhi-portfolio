@@ -14,11 +14,14 @@ jobs:
 
       - name: Deploy to Server via SSH
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
+          envs: CLOUDFLARE_TUNNEL_TOKEN
           script: |
             # 1. Navigate to project directory
             mkdir -p ~/projects
@@ -27,10 +30,17 @@ jobs:
             # 2. Update code
             git pull origin main
             
-            # 3. Backup current image for rollback
+            # 3. Create cloudflare env file
+            mkdir -p docker/cloudflare
+            echo "TUNNEL_TOKEN=$CLOUDFLARE_TUNNEL_TOKEN" > docker/cloudflare/.env
+            
+            # 4. Start Cloudflare Tunnel
+            cd docker/cloudflare && docker compose up -d && cd ../..
+            
+            # 5. Backup current image for rollback
             docker tag sahil-manjhi-portfolio:latest sahil-manjhi-portfolio:previous || true
             
-            # 4. Build and deploy
+            # 6. Build and deploy website
             echo "Building new image..."
             if docker build -t sahil-manjhi-portfolio:latest .; then
                 echo "Build successful. Restarting container..."
